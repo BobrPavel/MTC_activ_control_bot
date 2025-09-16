@@ -1,5 +1,6 @@
 import math
 from subprocess import list2cmdline
+from httpx import stream
 from sqlalchemy import select, update, delete, func, case
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
@@ -95,6 +96,18 @@ async def orm_add_player(session: AsyncSession, data: dict):
     await session.commit()
 
 
+async def orm_change_player(session: AsyncSession, player_name: str, data: dict):
+    query = (
+        update(Players)
+        .where(Players.name == player_name)
+        .values(
+            name=data["name"])
+    )
+    await session.execute(query)
+    await session.commit()
+
+
+
 async def orm_update_player_plus(session: AsyncSession, player_names: list) -> None:
     query = (
         update(Players)
@@ -124,6 +137,12 @@ async def orm_update_player_minus(session: AsyncSession, player_names: list) -> 
     )
     await session.execute(query)
     session.commit()
+
+
+async def orm_get_player(session: AsyncSession, player_names: str):
+    query = select(Cards).where(Cards.name == player_names)
+    result = await session.execute(query)
+    return result.scalar()
 
 
 async def orm_get_players(session: AsyncSession):

@@ -2,7 +2,6 @@ from aiogram import F, Router, types
 from aiogram.filters import Command, StateFilter, or_f
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from requests import session
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,6 +11,11 @@ from database.orm_query import (
     orm_get_cards,
     orm_update_card,
     orm_delete_card,
+    orm_add_player,
+    orm_change_player,
+    orm_get_player,
+    orm_get_players,
+    orm_delete_player,
 )
 
 from filters.chat_types import ChatTypeFilter, IsAdmin
@@ -152,7 +156,7 @@ async def add_image2(message: types.Message, state: FSMContext):
     await message.answer("Отправьте фото пищи")
 
 
-#########################################################################################
+################# Команды для карточек бронепробития ############################
 
 
 # Становимся в состояние ожидания ввода name
@@ -200,6 +204,114 @@ async def delete_card(message: types.Message, session: AsyncSession):
     await message.answer(f"Карточка {name} удалена")
     
 
+#################################################################################################
 
 
     
+
+################# FSM для загрузки изменения карточек бронепробития ############################
+
+class AddUser(StatesGroup):
+    name = State()
+
+    player_name = None
+    user_for_change = None
+
+    text = {
+        "AddCard:name": "Введите позывной игрока:",
+    }
+    
+
+# Хендлер отмены и сброса состояния должен быть всегда именно здесь,
+# после того, как только встали в состояние номер 1 (элементарная очередность фильтров)
+@admin_router.message(StateFilter("*"), Command("отмена"))
+@admin_router.message(StateFilter("*"), F.text.casefold() == "отмена")
+async def cancel_handler_user(message: types.Message, state: FSMContext) -> None:
+    current_state = await state.get_state()
+    if current_state is None:
+        return
+    if AddUser.user_for_change:
+        AddUser.user_for_change = None
+    await state.clear()
+    await message.answer("Действия отменены", reply_markup=ADMIN_KB)
+
+
+# Ловим данные для состояние name и потом сохраняем
+@admin_router.message(AddUser.name, F.text)
+async def add_user_ame(message: types.Message, state: FSMContext, session: AsyncSession):
+    # Здесь можно сделать какую либо дополнительную проверку
+    # и выйти из хендлера не меняя состояние с отправкой соответствующего сообщения
+    # например:
+    if 4 >= len(message.text) >= 150:
+        await message.answer(
+            "Название товара не должно превышать 150 символов\nили быть менее 5ти символов. \n Введите заново"
+        )
+        return
+    await state.update_data(name=message.text)
+    data = await state.get_data()
+
+    if AddUser.user_for_change:
+        await orm_change_player(session, AddUser.player_name, data)
+    
+    else:
+        await orm_add_player(session, data)
+    
+    await state.clear()
+    
+
+# Хендлер для отлова некорректных вводов для состояния name
+@admin_router.message(AddUser.name)
+async def add_user_name2(message: types.Message):
+    await message.answer("Вы ввели не допустимые данные, введите позывной игрока")
+
+
+################# Команды для карточек бронепробития ############################
+
+
+# Становимся в состояние ожидания ввода name
+@admin_router.message(StateFilter(None), F.text.startswith("add-user"))
+async def add_new_user(
+    message: types.Message, state: FSMContext
+):
+    await message.answer(
+        "Введите позывной", reply_markup=types.ReplyKeyboardRemove()
+    )
+    await state.set_state(AddUser.name)
+
+
+# Становимся в состояние ожидания ввода name для изменения карточки
+@admin_router.message(StateFilter(None), F.text.startswith("change-user_"))
+async def change_user(
+    message: types.Message, state: FSMContext, session: AsyncSession
+):
+    name = message.text.split("_")[-1]
+
+    user_for_change = await orm_get_player(session, name)
+
+    AddUser.user_for_change = user_for_change
+    AddUser.player_name = name
+
+    # await callback.answer()
+    await message.answer(
+        "Введите позывной", reply_markup=types.ReplyKeyboardRemove()
+    )
+    await state.set_state(AddUser.name)
+
+
+@admin_router.message(StateFilter(None), F.data == "players-list")
+async def list_of_players(message: types.Message, session: AsyncSession):
+    players = await orm_get_players(session)
+    text = ""
+    for player in players:
+        text = text + f"{str(player.name)} \n"
+    await message.answer(f"Вот список игроков: \n\n {text}")
+
+
+@admin_router.message(StateFilter(None), F.text.startswith("delete-player_"))
+async def delete_player(message: types.Message, session: AsyncSession):
+    name = message.text.split("_")[-1]
+    await orm_delete_player(session, name)
+    await message.answer(f"Игрок {name} удалён")
+    
+
+#################################################################################################
