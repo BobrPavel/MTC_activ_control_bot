@@ -1,7 +1,7 @@
 import asyncio
 import os
 
-from aiogram import Bot, Dispatcher
+from aiogram import Bot, Dispatcher, types
 from aiogram.client.bot import DefaultBotProperties
 from aiogram.enums.parse_mode import ParseMode
 
@@ -17,7 +17,7 @@ from database.engine import create_db, drop_db, session_maker
 # from handlers.user_group import user_group_router
 # from handlers.admin_private import admin_router
 
-from common.bot_cmds_list import private
+
 
 
 # ALLOWED_UPDATES = ['message', 'edited_message', 'callback_query']

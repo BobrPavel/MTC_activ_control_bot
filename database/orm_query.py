@@ -51,10 +51,10 @@ async def orm_add_card(session: AsyncSession, data: dict):
     await session.commit()
 
 
-async def orm_update_product(session: AsyncSession, product_id: int, data):
+async def orm_update_card(session: AsyncSession, name: str, data):
     query = (
         update(Cards)
-        .where(Cards.id == product_id)
+        .where(Cards.name == name)
         .values(
             name=data["name"],
             image=data["image"],
@@ -76,8 +76,8 @@ async def orm_get_card(session: AsyncSession, name: str):
     return result.scalar()
 
 
-async def orm_delete_card(session: AsyncSession, card_id: int):
-    query = delete(Cards).where(Cards.id == card_id)
+async def orm_delete_card(session: AsyncSession, name: int):
+    query = delete(Cards).where(Cards.name == name)
     await session.execute(query)
     await session.commit()
 
