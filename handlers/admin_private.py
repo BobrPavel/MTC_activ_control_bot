@@ -20,6 +20,7 @@ from database.orm_query import (
     orm_update_player_minus,
     orm_update_player_plus,
     orm_change_status_player,
+    orm_get_status,
 )
 
 from filters.chat_types import ChatTypeFilter, IsAdmin
@@ -164,30 +165,10 @@ async def add_image2(message: types.Message, state: FSMContext):
 
 
 # Становимся в состояние ожидания ввода name
-@admin_router.message(StateFilter(None), F.text.startswith("add-card"))
-async def change_card_(
-    message: types.Message, state: FSMContext, session: AsyncSession
-):
+@admin_router.message(StateFilter(None), F.text == "Новая карточка")
+async def add_card(message: types.Message, state: FSMContext):
     await message.answer(
         "Введите название техники", reply_markup=types.ReplyKeyboardRemove()
-    )
-    await state.set_state(AddCard.name)
-
-
-# Становимся в состояние ожидания ввода name для изменения карточки
-@admin_router.message(StateFilter(None), F.text.startswith("change-card_"))
-async def change_card(
-    message: types.Message, state: FSMContext, session: AsyncSession
-):
-    name = message.text.split("_")[-1]
-
-    card_for_change = await orm_get_card(session, name)
-
-    AddCard.product_for_change = card_for_change
-
-    # await callback.answer()
-    await message.answer(
-        "Введите название техникиа", reply_markup=types.ReplyKeyboardRemove()
     )
     await state.set_state(AddCard.name)
 
@@ -199,6 +180,24 @@ async def list_of_cards_(message: types.Message, session: AsyncSession):
     for card in cards:
         text = text + f"{str(card.name)} \n"
     await message.answer(f"Вот список карточек: \n\n {text}")
+
+
+# Становимся в состояние ожидания ввода name для изменения карточки
+@admin_router.message(StateFilter(None), F.text.startswith("change-card_"))
+async def change_card(message: types.Message, state: FSMContext, session: AsyncSession):
+    name = message.text.split("_")[-1]
+    card_for_change = await orm_get_card(session, name)
+
+    AddCard.product_for_change = card_for_change
+
+    # await callback.answer()
+    await message.answer(
+        "Введите название техникиа", reply_markup=types.ReplyKeyboardRemove()
+    )
+    await state.set_state(AddCard.name)
+
+
+
 
 
 @admin_router.message(StateFilter(None), F.text.startswith("delete_"))
@@ -272,17 +271,17 @@ async def add_user_name2(message: types.Message):
 ################# Команды для игроков ############################
 
 
-@admin_router.message(StateFilter(None), F.text.startswith("user_"))
+@admin_router.message(F.text.startswith("user_"))
 async def add_new_user(message: types.Message, session: AsyncSession):
     name = message.text.split("_")[-1]
     player = await orm_get_player(session, name)
     await message.answer(
-        f"Игрок: {player.name} Статус: {player.statuses.name}"
+        f"Игрок: {player.name} Статус: {player.statuses.name}",
         
         reply_markup=get_callback_btns(
                 btns={
                     "Изменить позывной": f"change-player_{player.name}",
-                    "Изменить статус": f"change-status_{player.name}"
+                    "Изменить статус": f"change-status_{player.name}",
                     "Удалить": f"delete-player_{player.name}", 
                 },
                 sizes=(1,2)
@@ -356,6 +355,39 @@ async def delete_player(callback: types.CallbackQuery, session: AsyncSession):
     
 
 #################################################################################################
+################# Команды для отчётности ############################
+
+
+@admin_router.message(Command("report"))
+async def report_cmd(message: types.Message, session: AsyncSession):
+    await message.answer(
+        "Выберите вариант"
+        reply_markup=get_callback_btns(
+                btns={
+                    "Общее": f"report_{0}",
+                    "Отпуска": f"report_{1}"
+                    "Казнь": f"report_{2}", 
+                },
+                sizes=(2,1)
+            ),
+        )
+
+
+@admin_router.callback_query(F.data.startswith("report_"))
+async def delete_player(callback: types.CallbackQuery, session: AsyncSession):
+    status_id = int(callback.data.split("_")[-1])
+    status = await orm_get_status(session, status_id).name
+    text = f"Отчёт по личному составу Триозёрска \n Статус: {status}"
+
+
+    max_length = 15
+    players = await orm_get_players(session, status_id)
+    for player in players:
+        text = text + f"{text[:max_length-3] + '...' if len(text) > max_length else text}|{player.count}|{player.direction.name}"
+
+
+    await callback.message.answer(text)
+
 
 
 ################# FSM для выполнения актив контроля ############################

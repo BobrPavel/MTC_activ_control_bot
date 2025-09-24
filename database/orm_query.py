@@ -17,10 +17,19 @@ async def orm_get_statuses(session: AsyncSession):
     return result.scalars().all()
 
 
+async def orm_get_status(session: AsyncSession, status_id: int):
+    query = select(Statuses).where(id=status_id)
+    result = await session.execute(query)
+    return result.scalars().all()
+
+
 async def orm_get_directions(session: AsyncSession):
     query = select(Directions)
     result = await session.execute(query)
     return result.scalars().all()
+
+
+
 
 
 async def orm_create_statuses(session: AsyncSession, categories: list):
@@ -145,8 +154,15 @@ async def orm_get_player(session: AsyncSession, player_names: str):
     return result.scalar()
 
 
-async def orm_get_players(session: AsyncSession):
-    query = select(Players).options(joinedload(Statuses.statuses))
+
+
+
+async def orm_get_players(session: AsyncSession, status_id: int | None = None):
+    if status_id is None:
+        query = select(Players).options(joinedload(Statuses.statuses))
+    else:
+        query = select(Players).where(statuses_id=status_id).options(joinedload(Statuses.statuses, Directions.direction))
+
     result = await session.execute(query)
     return result.scalars().all()
 
