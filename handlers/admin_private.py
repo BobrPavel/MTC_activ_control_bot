@@ -113,7 +113,7 @@ async def list_of_cards(callback: types.CallbackQuery, session: AsyncSession):
 
 
 
-@admin_router.callback_query(F.text.startswith("card_"))
+@admin_router.message(F.text.startswith("card_"))
 async def card_show(message: types.Message, session: AsyncSession):
     name = message.text.split("_")[-1]
     card = await orm_get_card(session, name)
