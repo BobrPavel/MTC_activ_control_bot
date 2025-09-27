@@ -57,14 +57,14 @@ async def admin_off(message: types.Message):
 @admin_router.message(F.text == 'Карточки')
 async def admin_cards(message: types.Message):
     await message.answer(
-        "Существует несколько команд для работы с карточками, чтобы создать новую карточку или просмотреть список существующих, нажмите на нужную кнопку." /
+        "Существует несколько команд для работы с карточками, чтобы создать новую карточку или просмотреть список существующих, нажмите на нужную кнопку." \
         "Для просмотра конкретной карточки введите card_[название карточки]",       
         reply_markup=get_callback_btns(
                 btns={
                     "Новая карточка": "add-new-card",
                     "Список карточек": "card-list",
                 },
-                sizes=(1,2)
+                sizes=(2,)
             ),
         )
 
@@ -72,14 +72,14 @@ async def admin_cards(message: types.Message):
 @admin_router.message(F.text == 'Игроки')
 async def admin_players(message: types.Message):
     await message.answer(
-        "Существует несколько команд для работы с игроками, чтобы добавить нового игрока или просмотреть список существующих, нажмите на нужную кнопку." /
+        "Существует несколько команд для работы с игроками, чтобы добавить нового игрока или просмотреть список существующих, нажмите на нужную кнопку." \
         "Для просмотра конкретного игрока введите player_[позывной игрока]",       
         reply_markup=get_callback_btns(
                 btns={
-                    "Новая карточка": "add-new-player",
-                    "Список карточек": "players-list",
+                    "Новый игрок": "add-new-player",
+                    "Список игроков": "players-list",
                 },
-                sizes=(1,2)
+                sizes=(2,)
             ),
         )
     
@@ -90,9 +90,9 @@ async def admin_reports(message: types.Message):
         "Выберите вариант",       
         reply_markup=get_callback_btns(
                 btns={
-                    "Общее": f"report_{0}",
-                    "Отпуска": f"report_{1}",
-                    "Казнь": f"report_{2}", 
+                    "Общее": f"report_{1}",
+                    "Отпуска": f"report_{2}",
+                    "Казнь": f"report_{3}", 
                 },
                 sizes=(1,2)
             ),
@@ -119,15 +119,15 @@ async def card_show(message: types.Message, session: AsyncSession):
     card = await orm_get_card(session, name)
     await message.answer_photo(
         card.image,
-        card.name,                      
+        caption = card.name,                      
         reply_markup=get_callback_btns(
-                btns={
-                    "Редактировать": f"change-card_{card.name}",
-                    "Удалить": f"delete_{card.name}",
-                },
-                sizes=(1,2),
-            ),
-        )
+            btns={
+                "Редактировать": f"change-сard_{card.name}",
+                "Удалить": f"delete_{card.name}",
+            },
+            sizes=(2,),
+        ),
+    )
 
 
 # запуск FSM добавления карточек, становимся в ожидание name
@@ -140,26 +140,14 @@ async def add_card(callback: types.CallbackQuery, state: FSMContext):
     await state.set_state(AddCard.name)
 
 
-# запуск FSM добавления карточек, становимся в ожидание name (редактирование)
-@admin_router.message(StateFilter(None), F.data.startswith("change-card_"))
-async def change_card(message: types.Message, state: FSMContext, session: AsyncSession):
-    name = message.text.split("_")[-1]
-    card_for_change = await orm_get_card(session, name)
-
-    AddCard.product_for_change = card_for_change
-
-    # await callback.answer()
-    await message.answer(
-        "Введите название техникиа", reply_markup=types.ReplyKeyboardRemove()
-    )
-    await state.set_state(AddCard.name)
 
 
-@admin_router.message(StateFilter(None), F.data.startswith("delete_"))
-async def delete_card(message: types.Message, session: AsyncSession):
-    name = message.text.split("_")[-1]
+
+@admin_router.callback_query(F.data.startswith("delete_"))
+async def delete_card(callback: types.CallbackQuery, session: AsyncSession):
+    name = callback.data.split("_")[-1]
     await orm_delete_card(session, name)
-    await message.answer(f"Карточка {name} удалена")
+    await callback.message.answer(f"Карточка {name} удалена")
 
 
 
@@ -176,6 +164,21 @@ class AddCard(StatesGroup):
         "AddCard:image": "Этот стейт последний, поэтому...",
     }
     
+
+# запуск FSM добавления карточек, становимся в ожидание name (редактирование)
+@admin_router.callback_query(StateFilter(None), F.data.startswith("change-сard_"))
+async def change_card(callback: types.CallbackQuery, state: FSMContext, session: AsyncSession):
+    name = callback.data.split("_")[-1]
+    card_for_change = await orm_get_card(session, name)
+
+    AddCard.card_for_change = card_for_change
+
+    await callback.answer()
+    await callback.message.answer(
+        "Введите название техникиа", reply_markup=types.ReplyKeyboardRemove()
+    )
+    await state.set_state(AddCard.name)
+
 
 # Хендлер отмены и сброса состояния должен быть всегда именно здесь,
 # после того, как только встали в состояние номер 1 (элементарная очередность фильтров)
@@ -243,7 +246,6 @@ async def add_name2(message: types.Message):
 async def add_image(message: types.Message, state: FSMContext, session: AsyncSession):
     if message.text and message.text == "." and AddCard.card_for_change:
         await state.update_data(image=AddCard.card_for_change.image)
-
     elif message.photo:
         await state.update_data(image=message.photo[-1].file_id)
     else:
@@ -252,8 +254,10 @@ async def add_image(message: types.Message, state: FSMContext, session: AsyncSes
     data = await state.get_data()
     try:
         if AddCard.card_for_change:
-            await orm_update_card(session, AddCard.card_for_change.id, data)
+            await orm_update_card(session, AddCard.card_for_change.name, data)
+            
         else:
+            print(1)
             await orm_add_card(session, data)
         await message.answer("Карточка добавлена/изменена", reply_markup=ADMIN_KB)
         await state.clear()
@@ -282,24 +286,24 @@ async def list_of_players(callback: types.CallbackQuery, session: AsyncSession):
     players = await orm_get_players(session)
     text = ""
     for player in players:
-        text = text + f"{str(player.name)} \n"
+        text = text + f"{player.name}\n"
     await callback.message.answer(f"Вот список игроков: \n\n {text}")
 
 
 
 @admin_router.message(F.text.startswith("player_"))
 async def add_new_user(message: types.Message, session: AsyncSession):
-    name = message.text.split("_")[-1]
-    player = await orm_get_player(session, name)
+    player_names = message.text.split("_")[-1]
+    player = await orm_get_player(session, player_names)
     await message.answer(
         f"{player.name}|{player.count}|{player.direction.name}|{player.statuses.name}.",
         reply_markup=get_callback_btns(
                 btns={
-                    "Изменить позывной": f"change-player_{player.name}",
-                    "Изменить статус": f"change-status_{player.name}",
+                    "🔄 позывной": f"change-player_{player.name}",
+                    "🔄 статус": f"change-status_{player.name}",
                     "Удалить": f"delete-player_{player.name}", 
                 },
-                sizes=(1,2)
+                sizes=(2,1)
             ),
         )
     
@@ -338,11 +342,13 @@ async def change_player_status(callback: types.CallbackQuery, session: AsyncSess
     name = callback.data.split("_")[-1]
     player = await orm_get_player(session, name)
     
-    if player.statuses_id == 0:
-        await orm_change_status_player(session, name, 1)
+    if player.statuses_id == 1:
+        print(1)
+        await orm_change_status_player(session, name, 2)
 
-    elif player.statuses_id == 1:
-        await orm_change_status_player(session, name, 0)
+    elif player.statuses_id == 2:
+        print(2)
+        await orm_change_status_player(session, name, 1)
 
     await callback.answer("Статус обновлён")
 
@@ -402,6 +408,7 @@ async def add_user_ame(message: types.Message, state: FSMContext, session: Async
         await orm_add_player(session, data)
     
     await state.clear()
+    await message.answer("Игрок добавлен")
     
 
 # Хендлер для отлова некорректных вводов для состояния name
@@ -417,17 +424,17 @@ async def add_user_name2(message: types.Message):
 @admin_router.callback_query(F.data.startswith("report_"))
 async def report_cmd(callback: types.CallbackQuery, session: AsyncSession):
     status_id = int(callback.data.split("_")[-1])
-    status = await orm_get_status(session, status_id).name
-    text = f"Отчёт по личному составу Триозёрска \n Статус: {status}"
-
+    statuses = await orm_get_status(session, status_id)
+    for status in statuses:
+        text = f"Отчёт по личному составу Триозёрска\nСтатус: {status.name}\n\n"
+    players_list = ""
 
     max_length = 15
     players = await orm_get_players(session, status_id)
     for player in players:
-        text = text + f"{text[:max_length-3] + '...' if len(text) > max_length else text}|{player.count}|{player.direction.name}"
-
-
-    await callback.message.answer(text)
+        players_list = players_list + f"{player.name}|{player.count}|{player.direction.name}\n"
+        # text = text + f"{text[:max_length-3] + '...' if len(text) > max_length else text}|{player.count}|{player.direction.name}"
+    await callback.message.answer(text + players_list)
 
 
 ################# FSM для выполнения актив контроля ############################
@@ -472,19 +479,27 @@ async def add_player_to_list(message: types.Message, state: FSMContext, session:
     
     if await orm_get_player(session, player):
         Activ_Control_FSM.player_names.append(player)
-        await message.answer("Игрок добавлен в список")
+        await message.answer(
+            "Игрок добавлен в список, введите следующего игрока или нажмите кнопку.",
+            reply_markup=get_callback_btns(
+                btns={
+                    "Завершить": "+",
+                    
+                },
+                sizes=(1,)
+            ),)
         await state.set_state(Activ_Control_FSM.name)
     else: 
         await message.answer("Такого игрока в базе нет")
         
 
-@admin_router.message(StateFilter(Activ_Control_FSM.name), F.text == "+")
-async def count_plus(message: types.Message, state: FSMContext, session: AsyncSession):
+@admin_router.callback_query(F.data == "+")
+async def count_plus(callback: types.CallbackQuery, state: FSMContext, session: AsyncSession):
     players = await orm_get_players2(session)
 
     i = 0
     
-    text = "Список активных игроков: \n"
+    text = "Список активных игроков:\n"
 
     for item in players:
         if item not in Activ_Control_FSM.player_names:
@@ -497,7 +512,7 @@ async def count_plus(message: types.Message, state: FSMContext, session: AsyncSe
     text = text + "\nЕсли нужно убрать какого-то игрока укажите его номер"
 
 
-    await message.answer(
+    await callback.message.answer(
         text,
         reply_markup=get_callback_btns(
             btns={

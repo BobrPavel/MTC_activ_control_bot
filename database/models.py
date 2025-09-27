@@ -36,11 +36,11 @@ class Players(Base):
     name: Mapped[str] = mapped_column(String(150), nullable=False)
     count: Mapped[int]
 
-    direction_id: Mapped[int] = mapped_column(ForeignKey('direction.id', ondelete='CASCADE'), nullable=False)
+    direction_id: Mapped[int] = mapped_column(ForeignKey('directions.id', ondelete='CASCADE'), nullable=False)
     statuses_id: Mapped[int] = mapped_column(ForeignKey('statuses.id', ondelete='CASCADE'), nullable=False)
     
-    direction: Mapped['Statuses'] = relationship(backref='product')
-    statuses: Mapped['Statuses'] = relationship(backref='product')
+    direction: Mapped['Directions'] = relationship(backref='players')
+    statuses: Mapped['Statuses'] = relationship(backref='players')
     
 
 

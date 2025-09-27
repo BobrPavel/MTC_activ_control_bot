@@ -18,9 +18,9 @@ async def orm_get_statuses(session: AsyncSession):
 
 
 async def orm_get_status(session: AsyncSession, status_id: int):
-    query = select(Statuses).where(id=status_id)
+    query = select(Statuses).where(Statuses.id == status_id)
     result = await session.execute(query)
-    return result.scalars().all()
+    return result.scalars()
 
 
 async def orm_get_directions(session: AsyncSession):
@@ -124,7 +124,7 @@ async def orm_update_player_plus(session: AsyncSession, player_names: list) -> N
         .values(count=Players.score + 1)
     )
     await session.execute(query)
-    session.commit()
+    await session.commit()
 
 
 async def orm_update_player_minus(session: AsyncSession, player_names: list) -> None:
@@ -145,11 +145,11 @@ async def orm_update_player_minus(session: AsyncSession, player_names: list) -> 
         )
     )
     await session.execute(query)
-    session.commit()
+    await session.commit()
 
 
 async def orm_get_player(session: AsyncSession, player_names: str):
-    query = select(Cards).where(Cards.name == player_names)
+    query = select(Players).where(Players.name == player_names).options(joinedload(Players.statuses), joinedload(Players.direction))
     result = await session.execute(query)
     return result.scalar()
 
@@ -159,9 +159,9 @@ async def orm_get_player(session: AsyncSession, player_names: str):
 
 async def orm_get_players(session: AsyncSession, status_id: int | None = None):
     if status_id is None:
-        query = select(Players).options(joinedload(Statuses.statuses))
+        query = select(Players).options(joinedload(Players.statuses))
     else:
-        query = select(Players).where(statuses_id=status_id).options(joinedload(Statuses.statuses, Directions.direction))
+        query = select(Players).where(Players.statuses_id == status_id).options(joinedload(Players.statuses), joinedload(Players.direction))
 
     result = await session.execute(query)
     return result.scalars().all()
@@ -171,20 +171,21 @@ async def orm_change_status_player(session: AsyncSession, player_name: str, stat
     query = (
         update(Players)
         .where(Players.name == player_name)
-        .values(statuses_id=status
-        )
+        .values(statuses_id=status)
     )
+    await session.execute(query)
+    await session.commit()
 
 
 async def orm_get_players2(session: AsyncSession):
-    query = select(Players).where(statuses_id=0)
+    query = select(Players).where(Players.statuses_id==1)
     result = await session.execute(query)
     return result.scalars().all()
 
 
 async def orm_delete_player(session: AsyncSession, player_name: str):
     query = delete(Players).where(Players.name == player_name)
-    result = await session.execute(query)
+    await session.execute(query)
     await session.commit()
 
 
