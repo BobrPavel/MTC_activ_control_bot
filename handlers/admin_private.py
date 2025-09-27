@@ -444,6 +444,7 @@ class Activ_Control_FSM(StatesGroup):
     id = State()
 
     player_names = []
+    all_players = []
     result = []
     
 
@@ -451,10 +452,11 @@ class Activ_Control_FSM(StatesGroup):
 
 # Становимся в состояние ожидания ввода name
 @admin_router.message(F.text == "Контроль")
-async def activ_control_add(message: types.Message, state: FSMContext):
+async def activ_control_add(message: types.Message, state: FSMContext, session: AsyncSession):
     await message.answer(
         "Введите позывной активного игрока", reply_markup=types.ReplyKeyboardRemove()
     )
+    Activ_Control_FSM.all_players = list(await orm_get_players2(session))
     await state.set_state(Activ_Control_FSM.name)
 
 
@@ -470,10 +472,8 @@ async def activ_cancel_handler(message: types.Message, state: FSMContext) -> Non
 # Ловим данные для состояние name и потом сохраняем
 @admin_router.message(Activ_Control_FSM.name, F.text)
 async def add_player_to_list(message: types.Message, state: FSMContext, session: AsyncSession):
-    
     player = message.text
-    
-    if await orm_get_player(session, player):
+    if player in Activ_Control_FSM.all_players:
         Activ_Control_FSM.player_names.append(player)
         await message.answer(
             "Игрок добавлен в список, введите следующего игрока или нажмите кнопку.",
@@ -486,7 +486,7 @@ async def add_player_to_list(message: types.Message, state: FSMContext, session:
             ),)
         await state.set_state(Activ_Control_FSM.name)
     else: 
-        await message.answer("Такого игрока в базе нет")
+        await message.answer("Такого игрока нет в базе или он в отпуске")
         
 
 @admin_router.callback_query(F.data == "+")
