@@ -495,21 +495,23 @@ async def add_player_to_list(message: types.Message, state: FSMContext, session:
 
 @admin_router.callback_query(F.data == "+")
 async def count_plus(callback: types.CallbackQuery, state: FSMContext, session: AsyncSession):
-    players = await orm_get_players2(session)
+    players = list(await orm_get_players2(session))
+
+    set2 = set(Activ_Control_FSM.player_names)
+    Activ_Control_FSM.result = [item for item in players if item not in set2]
+    
 
     i = 0
+    items = ""
     
-    text = "Список активных игроков:\n"
+    text = "Список активных игроков:\n\n"
 
-    for item in players:
-        if item not in Activ_Control_FSM.player_names:
-            Activ_Control_FSM.result.append(item)
-        else:
-            text = text + f"[{str(i)}]{item}\n"
+    for item in Activ_Control_FSM.player_names:
+            items = items + f"[{str(i)}]{item}\n"
             i = i + 1
     
 
-    text = text + "\nЕсли нужно убрать какого-то игрока укажите его номер"
+    text = text + items + "\nЕсли нужно убрать какого-то игрока укажите его номер"
 
 
     await callback.message.answer(
@@ -535,16 +537,17 @@ async def remove_palyer_from_list(message: types.Message, state: FSMContext, ses
     await state.set_state(Activ_Control_FSM.name)
 
 
-@admin_router.message(StateFilter(Activ_Control_FSM.name), F.data == "perform")
-async def activ_perform(message: types.Message, state: FSMContext, session: AsyncSession):
-    await orm_update_player_minus(session, Activ_Control_FSM.player_names)
+@admin_router.callback_query(StateFilter(Activ_Control_FSM.id), F.data == "perform")
+async def activ_perform(callback: types.CallbackQuery, state: FSMContext, session: AsyncSession):
     await orm_update_player_plus(session, Activ_Control_FSM.result)
+    await orm_update_player_minus(session, Activ_Control_FSM.player_names)
+    
 
-    Activ_Control_FSM.result = None
-    Activ_Control_FSM.player_names = None
+    Activ_Control_FSM.result = []
+    Activ_Control_FSM.player_names = []
     await state.clear()
 
-    await message.answer("Данные обновленны")
+    await callback.message.answer("Данные обновленны")
 
 
 

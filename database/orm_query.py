@@ -121,7 +121,13 @@ async def orm_update_player_plus(session: AsyncSession, player_names: list) -> N
     query = (
         update(Players)
         .where(Players.name.in_(player_names))
-        .values(count=Players.score + 1)
+        .values(
+            count=Players.count + 1,
+            statuses_id=case(
+                (Players.count + 1 > 3, 3),
+                else_=Players.statuses_id),
+            direction_id=2
+        )
     )
     await session.execute(query)
     await session.commit()
@@ -129,19 +135,17 @@ async def orm_update_player_plus(session: AsyncSession, player_names: list) -> N
 
 async def orm_update_player_minus(session: AsyncSession, player_names: list) -> None:
 
-    new_pass = func.greatest(Players.score - 1, 0)
-
-    new_status = case(
-        (new_pass > 3, 2),
-        else_=Players.status_id
-    )
 
     query = (
         update(Players)
         .where(Players.name.in_(player_names))
         .values(
-            count=new_pass,
-            status_id=new_status
+            count=case(
+                (Players.count - 1 < 0, 0),  # если после уменьшения меньше 0 — ставим 0
+                else_=Players.count - 1),
+            direction_id=case(
+                (Players.count - 1 < 0, 1),  # если после уменьшения меньше 0 — ставим 1
+                else_=3),
         )
     )
     await session.execute(query)
@@ -171,14 +175,20 @@ async def orm_change_status_player(session: AsyncSession, player_name: str, stat
     query = (
         update(Players)
         .where(Players.name == player_name)
-        .values(statuses_id=status)
+        .values(
+            statuses_id=status,
+            direction_id=case(
+                (Players.statuses_id==2, 1),
+                else_=Players.direction_id
+            )
+        )
     )
     await session.execute(query)
     await session.commit()
 
 
 async def orm_get_players2(session: AsyncSession):
-    query = select(Players).where(Players.statuses_id==1)
+    query = select(Players.name).where(Players.statuses_id==1 )
     result = await session.execute(query)
     return result.scalars().all()
 
