@@ -497,123 +497,108 @@ async def report_cmd(callback: types.CallbackQuery, session: AsyncSession):
 ################# FSM для выполнения актив контроля ############################
 
 
-class Activ_Control_FSM(StatesGroup):
+class ActivControlFSM(StatesGroup):
     name = State()
     id = State()
 
-    player_names = []
-    all_players = []
-    result = []
-
-
-# Становимся в состояние ожидания ввода name
+# ✅ Старт команды "Контроль"
 @admin_router.message(F.text == "Контроль")
-async def activ_control_add(
-    message: types.Message, state: FSMContext, session: AsyncSession
-):
+async def start_control(message: types.Message, state: FSMContext, session: AsyncSession):
+    players = await orm_get_players2(session)
+    await state.update_data(all_players=players, selected=[], result=[])
+
     await message.answer(
-        "Введите позывной активного игрока", reply_markup=types.ReplyKeyboardRemove()
+        "Введите позывной активного игрока", 
+        reply_markup=types.ReplyKeyboardRemove()
     )
-    Activ_Control_FSM.all_players = list(await orm_get_players2(session))
-    await state.set_state(Activ_Control_FSM.name)
+    await state.set_state(ActivControlFSM.name)
 
 
-@admin_router.message(Activ_Control_FSM.name, F.data == "cancel_activ")
-async def activ_cancel_handler(message: types.Message, state: FSMContext) -> None:
-    Activ_Control_FSM.result = []
-    Activ_Control_FSM.all_players = []
-    Activ_Control_FSM.player_names = []
+# ✅ Отмена
+@admin_router.message(ActivControlFSM.name, F.data == "cancel_activ")
+@admin_router.message(ActivControlFSM.id, F.data == "cancel_activ")
+async def cancel_control(message: types.Message, state: FSMContext):
     await state.clear()
     await message.answer("Действия отменены", reply_markup=ADMIN_KB)
 
 
-# Ловим данные для состояние name и потом сохраняем
-@admin_router.message(Activ_Control_FSM.name, F.text)
-async def add_player_to_list(
-    message: types.Message, state: FSMContext, session: AsyncSession
-):
+# ✅ Добавление игрока
+@admin_router.message(ActivControlFSM.name, F.text)
+async def add_player(message: types.Message, state: FSMContext):
+    data = await state.get_data()
     player = message.text
-    if player in Activ_Control_FSM.all_players:
-        Activ_Control_FSM.player_names.append(player)
+
+    if player in data["all_players"]:
+        selected = data.get("selected", [])
+        if player not in selected:
+            selected.append(player)
+            await state.update_data(selected=selected)
+        
         await message.answer(
-            "Игрок добавлен в список, введите следующего игрока или нажмите кнопку.",
+            "Игрок добавлен. Введите ещё или нажмите кнопку.",
             reply_markup=get_callback_btns(
-                btns={
-                    "Завершить": "+",
-                    "Отменить всё": "cancel_activ",
-                },
-                sizes=(2,),
-            ),
+                btns={"Завершить": "+", "Отменить всё": "cancel_activ"},
+                sizes=(2,)
+            )
         )
-        await state.set_state(Activ_Control_FSM.name)
     else:
-        await message.answer("Такого игрока нет в базе или он в отпуске")
+        await message.answer("Такого игрока нет в базе или он в отпуске.")
 
 
+# ✅ Показать список и предложить удалить
 @admin_router.callback_query(F.data == "+")
-async def count_plus(
-    callback: types.CallbackQuery, state: FSMContext, session: AsyncSession
-):
-    players = list(await orm_get_players2(session))
+async def show_selected(callback: types.CallbackQuery, state: FSMContext, session: AsyncSession):
+    data = await state.get_data()
+    selected = data.get("selected", [])
+    all_players = data.get("all_players", [])
 
-    set2 = set(Activ_Control_FSM.player_names)
-    Activ_Control_FSM.result = [item for item in players if item not in set2]
-
-    i = 0
-    items = ""
+    # Вычисляем result
+    result = [p for p in all_players if p not in selected]
+    await state.update_data(result=result)
 
     text = "Список активных игроков:\n\n"
-
-    for item in Activ_Control_FSM.player_names:
-        items = items + f"[{str(i)}]{item}\n"
-        i = i + 1
-
-    text = text + items + "\nЕсли нужно убрать какого-то игрока укажите его номер"
+    for idx, name in enumerate(selected):
+        text += f"[{idx}] {name}\n"
+    text += "\nЕсли нужно убрать игрока — введите его номер."
 
     await callback.message.answer(
         text,
         reply_markup=get_callback_btns(
-            btns={
-                "Выполнить": "perform",
-                "Отменить всё": "cancel_activ",
-            },
-            sizes=(2,),
-        ),
+            btns={"Выполнить": "perform", "Отменить всё": "cancel_activ"},
+            sizes=(2,)
+        )
     )
-    await state.set_state(Activ_Control_FSM.id)
+    await state.set_state(ActivControlFSM.id)
 
 
-@admin_router.message(Activ_Control_FSM.id)
-async def remove_palyer_from_list(
-    message: types.Message, state: FSMContext, session: AsyncSession
-):
-    x = int(message.text)
-    name = Activ_Control_FSM.player_names[x]
+# ✅ Удалить игрока из списка
+@admin_router.message(ActivControlFSM.id, F.text.regexp(r"^\d+$"))
+async def remove_player(message: types.Message, state: FSMContext):
+    index = int(message.text)
+    data = await state.get_data()
+    selected = data.get("selected", [])
 
-    del Activ_Control_FSM.player_names[x]
-    await message.answer(
-        f"Игрок {name} удалён. Введите позывной игрока или нажмите кнопку чтобы завершить операцию",
-        reply_markup=get_callback_btns(
-            btns={
-                "Завершить": "+",
-                "Отменить всё": "cancel_activ",
-            },
-            sizes=(2,),
-        ),
-    )
-    await state.set_state(Activ_Control_FSM.name)
+    if 0 <= index < len(selected):
+        removed = selected.pop(index)
+        await state.update_data(selected=selected)
+        await message.answer(
+            f"Игрок {removed} удалён. Введите ещё или нажмите кнопку.",
+            reply_markup=get_callback_btns(
+                btns={"Завершить": "+", "Отменить всё": "cancel_activ"},
+                sizes=(2,)
+            )
+        )
+        await state.set_state(ActivControlFSM.name)
+    else:
+        await message.answer("Некорректный номер игрока.")
 
 
-@admin_router.callback_query(StateFilter(Activ_Control_FSM.id), F.data == "perform")
-async def activ_perform(
-    callback: types.CallbackQuery, state: FSMContext, session: AsyncSession
-):
-    await orm_update_player_plus(session, Activ_Control_FSM.result)
-    await orm_update_player_minus(session, Activ_Control_FSM.player_names)
+# ✅ Выполнить операцию
+@admin_router.callback_query(StateFilter(ActivControlFSM.id), F.data == "perform")
+async def perform_control(callback: types.CallbackQuery, state: FSMContext, session: AsyncSession):
+    data = await state.get_data()
+    await orm_update_player_plus(session, data["result"])
+    await orm_update_player_minus(session, data["selected"])
 
-    Activ_Control_FSM.result = []
-    Activ_Control_FSM.all_players = []
-    Activ_Control_FSM.player_names = []
     await state.clear()
-
-    await callback.message.answer("Данные обновленны", reply_markup=ADMIN_KB)
+    await callback.message.answer("Данные обновлены.", reply_markup=ADMIN_KB)
