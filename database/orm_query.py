@@ -90,6 +90,7 @@ async def orm_delete_card(session: AsyncSession, name: int):
     query = delete(Cards).where(Cards.name == name)
     await session.execute(query)
     await session.commit()
+    return True
 
 
 ##################### Добавляем игрока в БД #####################################
