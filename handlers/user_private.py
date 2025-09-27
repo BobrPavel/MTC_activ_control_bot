@@ -21,18 +21,27 @@ user_private_router = Router()
 user_private_router.message.filter(ChatTypeFilter(["private"]))
 
 
+# Показывает список карт
 @user_private_router.message(F.text == "Карты пробития")
-async def list_of_cards(callback: types.CallbackQuery, session: AsyncSession):
+async def list_of_cards(message: types.Message, session: AsyncSession):
     cards = await orm_get_cards(session)
-    text = ""
-    for card in cards:
-        text = text + f"{str(card.name)} \n"
-    await callback.message.answer(f"Вот список техники. Если хотите посмотреть что-то подробнее, то напишите 'Карта_Название техники': \n\n{text}")
+    if not cards:
+        await message.answer("Список карт пуст.")
+        return
 
+    text = "\n".join(card.name for card in cards)
+    await message.answer(
+        f"Вот список техники. Если хотите посмотреть что-то подробнее, "
+        f"напишите 'Карта_Название техники':\n\n{text}"
+    )
 
-
+# Показывает конкретную карту
 @user_private_router.message(F.text.startswith("Карта_"))
 async def card_show(message: types.Message, session: AsyncSession):
-    name = message.text.split("_")[-1]
+    name = message.text.removeprefix("Карта_").strip()
     card = await orm_get_card(session, name)
-    await message.answer_photo(card.image, card.name)
+
+    if card:
+        await message.answer_photo(card.image, caption=card.name)
+    else:
+        await message.answer("Карта с таким названием не найдена.")
