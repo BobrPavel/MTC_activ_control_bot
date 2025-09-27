@@ -446,27 +446,23 @@ class Activ_Control_FSM(StatesGroup):
     player_names = []
     result = []
     
-    text = {
-        "AddCard:name": "Введите позывной игрока:",
-    }
+
 
 
 # Становимся в состояние ожидания ввода name
 @admin_router.message(F.text == "Контроль")
 async def activ_control_add(message: types.Message, state: FSMContext):
     await message.answer(
-        "Введите позывной", reply_markup=types.ReplyKeyboardRemove()
+        "Введите позывной активного игрока", reply_markup=types.ReplyKeyboardRemove()
     )
     await state.set_state(Activ_Control_FSM.name)
 
 
-@admin_router.message(Activ_Control_FSM.name, Command("отмена"))
-@admin_router.message(Activ_Control_FSM.name, F.text.casefold() == "отмена")
+
 @admin_router.message(Activ_Control_FSM.name, F.data == "cancel_activ")
-async def cancel_handler(message: types.Message, state: FSMContext) -> None:
-    current_state = await state.get_state()
-    if current_state is None:
-        return
+async def activ_cancel_handler(message: types.Message, state: FSMContext) -> None:
+    Activ_Control_FSM.result = []
+    Activ_Control_FSM.player_names = []
     await state.clear()
     await message.answer("Действия отменены", reply_markup=ADMIN_KB)
 
@@ -484,9 +480,9 @@ async def add_player_to_list(message: types.Message, state: FSMContext, session:
             reply_markup=get_callback_btns(
                 btns={
                     "Завершить": "+",
-                    
+                    "Отменить всё": "cancel_activ",
                 },
-                sizes=(1,)
+                sizes=(2,)
             ),)
         await state.set_state(Activ_Control_FSM.name)
     else: 
@@ -518,8 +514,8 @@ async def count_plus(callback: types.CallbackQuery, state: FSMContext, session: 
         text,
         reply_markup=get_callback_btns(
             btns={
-                "Выполнить": f"perform",
-                "Отмена": "cancel_activ",
+                "Выполнить": "perform",
+                "Отменить всё": "cancel_activ",
             },
             sizes=(2,)
             ),
@@ -533,7 +529,15 @@ async def remove_palyer_from_list(message: types.Message, state: FSMContext, ses
     name = Activ_Control_FSM.player_names[x]
 
     del Activ_Control_FSM.player_names[x]
-    await message.answer(f"Игрок {name} удалён. Введите позывной игрока или напишите + чтобы выполнить операцию")
+    await message.answer(
+        f"Игрок {name} удалён. Введите позывной игрока или нажмите кнопку чтобы завершить операцию",
+        reply_markup=get_callback_btns(
+                btns={
+                    "Завершить": "+",
+                    "Отменить всё": "cancel_activ",
+                },
+                sizes=(2,)
+            ),)
     await state.set_state(Activ_Control_FSM.name)
 
 
@@ -547,7 +551,7 @@ async def activ_perform(callback: types.CallbackQuery, state: FSMContext, sessio
     Activ_Control_FSM.player_names = []
     await state.clear()
 
-    await callback.message.answer("Данные обновленны")
+    await callback.message.answer("Данные обновленны", reply_markup=ADMIN_KB)
 
 
 

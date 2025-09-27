@@ -188,7 +188,7 @@ async def orm_change_status_player(session: AsyncSession, player_name: str, stat
 
 
 async def orm_get_players2(session: AsyncSession):
-    query = select(Players.name).where(Players.statuses_id==1 )
+    query = select(Players.name).where(Players.statuses_id==1)
     result = await session.execute(query)
     return result.scalars().all()
 
