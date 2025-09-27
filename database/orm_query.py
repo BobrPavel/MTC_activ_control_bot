@@ -198,6 +198,7 @@ async def orm_delete_player(session: AsyncSession, player_name: str):
     query = delete(Players).where(Players.name == player_name)
     await session.execute(query)
     await session.commit()
+    return True
 
 
 
