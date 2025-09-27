@@ -3,7 +3,8 @@ from aiogram.filters import Command, StateFilter, or_f
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession 
 
 from database.orm_query import (
     orm_add_card,
@@ -287,7 +288,7 @@ async def list_of_players(callback: types.CallbackQuery, session: AsyncSession):
     text = ""
     for player in players:
         text = text + f"{player.name}\n"
-    await callback.message.answer(f"Вот список игроков: \n\n {text}")
+    await callback.message.answer(f"Вот список игроков: \n\n{text}")
 
 
 
@@ -393,22 +394,31 @@ async def add_user_ame(message: types.Message, state: FSMContext, session: Async
     # Здесь можно сделать какую либо дополнительную проверку
     # и выйти из хендлера не меняя состояние с отправкой соответствующего сообщения
     # например:
-    if 4 >= len(message.text) >= 150:
+    if 3 >= len(message.text) <= 25:
         await message.answer(
-            "Название товара не должно превышать 150 символов\nили быть менее 5ти символов. \n Введите заново"
+            "Позывной игрока должен быть больше 2 и меньше 25 символов. \n Введите заново"
         )
         return
+    
     await state.update_data(name=message.text)
     data = await state.get_data()
 
-    if AddUser.user_for_change:
-        await orm_change_player(session, AddUser.player_name, data)
+    try:
+        if AddUser.user_for_change:
+            await orm_change_player(session, AddUser.player_name, data)
+
+        else:
+            await orm_add_player(session, data)
+        
+        await state.clear()
+        await message.answer("Игрок добавлен", reply_markup=ADMIN_KB)
+
+    except IntegrityError:
+        await message.answer("Игрок с таким позывным уже есть, введите другой позывной", reply_markup=ADMIN_KB)
+        return
+
     
-    else:
-        await orm_add_player(session, data)
-    
-    await state.clear()
-    await message.answer("Игрок добавлен")
+
     
 
 # Хендлер для отлова некорректных вводов для состояния name
@@ -429,11 +439,9 @@ async def report_cmd(callback: types.CallbackQuery, session: AsyncSession):
         text = f"Отчёт по личному составу Триозёрска\nСтатус: {status.name}\n\n"
     players_list = ""
 
-    max_length = 15
     players = await orm_get_players(session, status_id)
     for player in players:
         players_list = players_list + f"{player.name}|{player.count}|{player.direction.name}\n"
-        # text = text + f"{text[:max_length-3] + '...' if len(text) > max_length else text}|{player.count}|{player.direction.name}"
     await callback.message.answer(text + players_list)
 
 
@@ -464,6 +472,7 @@ async def activ_control_add(message: types.Message, state: FSMContext, session: 
 @admin_router.message(Activ_Control_FSM.name, F.data == "cancel_activ")
 async def activ_cancel_handler(message: types.Message, state: FSMContext) -> None:
     Activ_Control_FSM.result = []
+    Activ_Control_FSM.all_players = []
     Activ_Control_FSM.player_names = []
     await state.clear()
     await message.answer("Действия отменены", reply_markup=ADMIN_KB)
@@ -548,6 +557,7 @@ async def activ_perform(callback: types.CallbackQuery, state: FSMContext, sessio
     
 
     Activ_Control_FSM.result = []
+    Activ_Control_FSM.all_players = []
     Activ_Control_FSM.player_names = []
     await state.clear()
 

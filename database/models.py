@@ -33,7 +33,7 @@ class Players(Base):
     __tablename__ = 'players'
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    name: Mapped[str] = mapped_column(String(150), nullable=False)
+    name: Mapped[str] = mapped_column(String(150), nullable=False, unique=True)
     count: Mapped[int]
 
     direction_id: Mapped[int] = mapped_column(ForeignKey('directions.id', ondelete='CASCADE'), nullable=False)
