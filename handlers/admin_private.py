@@ -468,18 +468,30 @@ async def add_user_name2(message: types.Message):
 
 @admin_router.callback_query(F.data.startswith("report_"))
 async def report_cmd(callback: types.CallbackQuery, session: AsyncSession):
-    status_id = int(callback.data.split("_")[-1])
-    statuses = await orm_get_status(session, status_id)
-    for status in statuses:
-        text = f"Отчёт по личному составу Триозёрска\nСтатус: {status.name}\n\n"
-    players_list = ""
+    try:
+        status_id = int(callback.data.removeprefix("report_"))
+    except ValueError:
+        await callback.message.answer("Неверный формат команды.")
+        return
 
+
+    # Получение статуса
+    status = await orm_get_status(session, status_id)
+    header = f"📝 Отчёт по личному составу Триозёрска\nСтатус: {status.name}\n\n"
+
+    # Получение игроков с данным статусом
     players = await orm_get_players(session, status_id)
-    for player in players:
-        players_list = (
-            players_list + f"{player.name}|{player.count}|{player.direction.name}\n"
-        )
-    await callback.message.answer(text + players_list)
+    if not players:
+        await callback.message.answer(header + "Нет игроков с этим статусом.")
+        return
+
+    # Формирование списка игроков
+    players_list = "\n".join(
+        f"{player.name} | {player.count} | {player.direction.name}" for player in players
+    )
+
+    await callback.message.answer(header + players_list)
+
 
 
 ################# FSM для выполнения актив контроля ############################

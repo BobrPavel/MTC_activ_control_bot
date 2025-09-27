@@ -1,6 +1,3 @@
-import math
-from subprocess import list2cmdline
-from httpx import stream
 from sqlalchemy import select, update, delete, func, case
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
@@ -20,7 +17,7 @@ async def orm_get_statuses(session: AsyncSession):
 async def orm_get_status(session: AsyncSession, status_id: int):
     query = select(Statuses).where(Statuses.id == status_id)
     result = await session.execute(query)
-    return result.scalars()
+    return result.scalar_one_or_none()
 
 
 async def orm_get_directions(session: AsyncSession):
