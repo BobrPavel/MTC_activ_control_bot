@@ -27,7 +27,7 @@ async def list_of_cards(callback: types.CallbackQuery, session: AsyncSession):
     text = ""
     for card in cards:
         text = text + f"{str(card.name)} \n"
-    await callback.message.answer(f"Вот список техники: \n\n {text}")
+    await callback.message.answer(f"Вот список техники. Если хотите посмотреть что-то подробнее, то напишите 'Карта_Название техники': \n\n{text}")
 
 
 

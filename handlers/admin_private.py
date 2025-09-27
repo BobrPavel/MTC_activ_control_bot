@@ -92,7 +92,7 @@ async def admin_reports(message: types.Message):
         "Выберите вариант",
         reply_markup=get_callback_btns(
             btns={
-                "Общее": f"report_{1}",
+                "Норма": f"report_{1}",
                 "Отпуска": f"report_{2}",
                 "Казнь": f"report_{3}",
             },
@@ -165,141 +165,16 @@ async def delete_card(callback: types.CallbackQuery, session: AsyncSession):
         await callback.message.answer(f"Карточка '{name}' не найдена или не удалена.")
 
 
-################################# Админ команды (FSM для карточек) #################################
-
-
-class AddCard(StatesGroup):
-    name = State()
-    image = State()
-
-    card_for_change = None
-
-    text = {
-        "AddCard:name": "Введите название заново:",
-        "AddCard:image": "Этот стейт последний, поэтому...",
-    }
-
-
-# запуск FSM добавления карточек, становимся в ожидание name (редактирование)
-@admin_router.callback_query(StateFilter(None), F.data.startswith("change-сard_"))
-async def change_card(
-    callback: types.CallbackQuery, state: FSMContext, session: AsyncSession
-):
+@admin_router.callback_query(F.data.startswith("change-card_"))
+async def start_edit_card(callback: types.CallbackQuery, state: FSMContext, session: AsyncSession):
     name = callback.data.split("_")[-1]
-    card_for_change = await orm_get_card(session, name)
-
-    AddCard.card_for_change = card_for_change
-
-    await callback.answer()
-    await callback.message.answer(
-        "Введите название техникиа", reply_markup=types.ReplyKeyboardRemove()
-    )
+    card = await orm_get_card(session, name)
+    await state.update_data(item_for_change=card, original_key=name)
+    await callback.message.answer("Введите новое название карточки:")
     await state.set_state(AddCard.name)
 
 
-# Хендлер отмены и сброса состояния должен быть всегда именно здесь,
-# после того, как только встали в состояние номер 1 (элементарная очередность фильтров)
-@admin_router.message(StateFilter("*"), Command("отмена"))
-@admin_router.message(StateFilter("*"), F.text.casefold() == "отмена")
-async def cancel_handler(message: types.Message, state: FSMContext) -> None:
-    current_state = await state.get_state()
-    if current_state is None:
-        return
-    if AddCard.card_for_change:
-        AddCard.card_for_change = None
-    await state.clear()
-    await message.answer("Действия отменены", reply_markup=ADMIN_KB)
 
-
-# Вернутся на шаг назад (на прошлое состояние)
-@admin_router.message(StateFilter("*"), Command("назад"))
-@admin_router.message(StateFilter("*"), F.text.casefold() == "назад")
-async def back_step_handler(message: types.Message, state: FSMContext) -> None:
-    current_state = await state.get_state()
-
-    if current_state == AddCard.name:
-        await message.answer(
-            'Предидущего шага нет, или введите название техники или напишите "отмена"'
-        )
-        return
-
-    previous = None
-    for step in AddCard.__all_states__:
-        if step.state == current_state:
-            await state.set_state(previous)
-            await message.answer(
-                f"Ок, вы вернулись к прошлому шагу \n {AddCard.texts[previous.state]}"
-            )
-            return
-        previous = step
-
-
-# Ловим данные для состояние name и потом меняем состояние на image
-@admin_router.message(AddCard.name, F.text)
-async def add_name(message: types.Message, state: FSMContext):
-    if message.text == "." and AddCard.card_for_change:
-        await state.update_data(name=AddCard.card_for_change.name)
-    else:
-        # Здесь можно сделать какую либо дополнительную проверку
-        # и выйти из хендлера не меняя состояние с отправкой соответствующего сообщения
-        # например:
-        if 3 >= len(message.text) >= 150:
-            await message.answer(
-                "Название карточки не должно превышать 150 символов\nили быть менее трёх символов. \n Введите заново"
-            )
-            return
-
-        await state.update_data(name=message.text)
-    await message.answer("Отправьте карточку")
-    await state.set_state(AddCard.image)
-
-
-# Хендлер для отлова некорректных вводов для состояния name
-@admin_router.message(AddCard.name)
-async def add_name2(message: types.Message):
-    await message.answer(
-        "Вы ввели не допустимые данные, введите текст названия техники"
-    )
-
-
-# Ловим данные для состояние image и потом выходим из состояний
-@admin_router.message(AddCard.image, or_f(F.photo, F.text == "."))
-async def add_image(message: types.Message, state: FSMContext, session: AsyncSession):
-    if message.text and message.text == "." and AddCard.card_for_change:
-        await state.update_data(image=AddCard.card_for_change.image)
-    elif message.photo:
-        await state.update_data(image=message.photo[-1].file_id)
-    else:
-        await message.answer("Отправьте карточку в виде картинки")
-        return
-    data = await state.get_data()
-    try:
-        if AddCard.card_for_change:
-            await orm_update_card(session, AddCard.card_for_change.name, data)
-
-        else:
-            print(1)
-            await orm_add_card(session, data)
-        await message.answer("Карточка добавлена/изменена", reply_markup=ADMIN_KB)
-        await state.clear()
-
-    except Exception as e:
-        await message.answer(
-            f"Ошибка: \n{str(e)}\nОбратись к программеру, он опять денег хочет",
-            reply_markup=ADMIN_KB,
-        )
-        await state.clear()
-
-    AddCard.card_for_change = None
-
-
-# Ловим все прочее некорректное поведение для этого состояния
-@admin_router.message(AddCard.image)
-async def add_image2(message: types.Message):
-    await message.answer("Отправьте фото карточки бронепробития")
-
-
-############################################################################################
 ################################# Админ команды (игроки) #################################
 
 
@@ -393,73 +268,133 @@ async def delete_player(callback: types.CallbackQuery, session: AsyncSession):
         await callback.message.answer(f"Игрок '{player_name}' не найден или не удалён.")
 
 
-################################# Админ команды (FSM для игроков) #################################
+@admin_router.callback_query(F.data.startswith("change-user_"))
+async def start_edit_user(callback: types.CallbackQuery, state: FSMContext, session: AsyncSession):
+    name = callback.data.split("_")[-1]
+    user = await orm_get_user(session, name)
+    await state.update_data(item_for_change=user, original_key=name)
+    await callback.message.answer("Введите новый позывной:")
+    await state.set_state(AddUser.name)
+
+
+################################# Админ команды (универсальный FSM) #################################
+
+
+class AddCard(StatesGroup):
+    name = State()
+    image = State()
+
+    text = {
+        "AddCard:name": "Введите название заново:",
+        "AddCard:image": "Отправьте изображение карточки.",
+    }
 
 
 class AddUser(StatesGroup):
     name = State()
 
-    player_name = None
-    user_for_change = None
-
     text = {
-        "AddCard:name": "Введите позывной игрока:",
+        "AddUser:name": "Введите позывной игрока:",
     }
 
 
-# Хендлер отмены и сброса состояния должен быть всегда именно здесь,
-# после того, как только встали в состояние номер 1 (элементарная очередность фильтров)
+################################# Админ команды (универсальный FSM (отмена/назад)) #################################
+
+
 @admin_router.message(StateFilter("*"), Command("отмена"))
 @admin_router.message(StateFilter("*"), F.text.casefold() == "отмена")
-async def cancel_handler_user(message: types.Message, state: FSMContext) -> None:
+async def cancel_handler(message: types.Message, state: FSMContext):
+    if await state.get_state():
+        await state.clear()
+        await message.answer("Действие отменено", reply_markup=ADMIN_KB)
+
+
+@admin_router.message(StateFilter("*"), Command("назад"))
+@admin_router.message(StateFilter("*"), F.text.casefold() == "назад")
+async def back_step_handler(message: types.Message, state: FSMContext):
     current_state = await state.get_state()
-    if current_state is None:
-        return
-    if AddUser.user_for_change:
-        AddUser.user_for_change = None
-    await state.clear()
-    await message.answer("Действия отменены", reply_markup=ADMIN_KB)
-
-
-# Ловим данные для состояние name и потом сохраняем
-@admin_router.message(AddUser.name, F.text)
-async def add_user_ame(
-    message: types.Message, state: FSMContext, session: AsyncSession
-):
-    # Здесь можно сделать какую либо дополнительную проверку
-    # и выйти из хендлера не меняя состояние с отправкой соответствующего сообщения
-    # например:
-    if 3 >= len(message.text) <= 25:
-        await message.answer(
-            "Позывной игрока должен быть больше 2 и меньше 25 символов. \n Введите заново"
-        )
+    if not current_state:
         return
 
-    await state.update_data(name=message.text)
+    all_states = AddCard.__all_states__ + AddUser.__all_states__
+    previous = None
+    for step in all_states:
+        if step.state == current_state:
+            if previous:
+                await state.set_state(previous)
+                state_texts = getattr(step.group, "text", {})
+                text = state_texts.get(previous.state, "Вы вернулись назад.")
+                await message.answer(text)
+            else:
+                await message.answer("Вы уже на первом шаге.")
+            return
+        previous = step
+
+
+# универсальный хендлер name
+@admin_router.message(F.text, StateFilter(AddCard.name, AddUser.name))
+async def handle_name_input(message: types.Message, state: FSMContext, session: AsyncSession):
+    state_name = await state.get_state()
+    state_group = AddCard if state_name.startswith("AddCard") else AddUser
+
+    text = message.text.strip()
+    if not (3 <= len(text) <= 150):
+        await message.answer("Текст должен быть от 3 до 150 символов.")
+        return
+
+    await state.update_data(name=text)
+
+
+    if state_group is AddCard:
+        await message.answer(state_group.text.get(f"{state_group.__name__}:image", "Введите следующий шаг."))
+        await state.set_state(AddCard.image)
+    else:
+        # Финальный шаг — сразу сохраняем
+        await save_entity(state_group, message, state, session)
+
+
+# хэендлер image
+@admin_router.message(AddCard.image, or_f(F.photo, F.text == "."))
+async def handle_card_image(message: types.Message, state: FSMContext, session: AsyncSession):
+    if message.photo:
+        await state.update_data(image=message.photo[-1].file_id)
+    elif message.text == ".":
+        data = await state.get_data()
+        if "item_for_change" in data:
+            await state.update_data(image=data["item_for_change"].get("image"))
+    else:
+        await message.answer("Отправьте изображение карточки.")
+        return
+
+    await save_entity(AddCard, message, state, session)
+
+
+# общая функция сохранения
+async def save_entity(state_group, message: types.Message, state: FSMContext, session: AsyncSession):
     data = await state.get_data()
+    item_for_change = data.get("item_for_change")
+    original_key = data.get("original_key")
 
     try:
-        if AddUser.user_for_change:
-            await orm_change_player(session, AddUser.player_name, data)
-
+        if item_for_change:
+            if state_group is AddCard:
+                await orm_update_card(session, original_key, data)
+            elif state_group is AddUser:
+                await orm_change_player(session, original_key, data)
         else:
-            await orm_add_player(session, data)
+            if state_group is AddCard:
+                await orm_add_card(session, data)
+            elif state_group is AddUser:
+                await orm_add_player(session, data)
 
-        await state.clear()
-        await message.answer("Игрок добавлен", reply_markup=ADMIN_KB)
-
+        await message.answer("Данные успешно сохранены.", reply_markup=ADMIN_KB)
     except IntegrityError:
-        await message.answer(
-            "Игрок с таким позывным уже есть, введите другой позывной",
-            reply_markup=ADMIN_KB,
-        )
+        await message.answer("Объект с такими данными уже существует.")
         return
-
-
-# Хендлер для отлова некорректных вводов для состояния name
-@admin_router.message(AddUser.name)
-async def add_user_name2(message: types.Message):
-    await message.answer("Вы ввели не допустимые данные, введите позывной игрока")
+    except Exception as e:
+        await message.answer(f"Ошибка при сохранении: {e}")
+    finally:
+        await state.clear()
 
 
 ############################################################################################
