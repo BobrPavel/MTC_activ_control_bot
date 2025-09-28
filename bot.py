@@ -15,8 +15,9 @@ from database.engine import create_db, drop_db, session_maker
 
 from handlers.user_private import user_private_router
 from handlers.user_group import user_group_router
-from handlers.admin_private import admin_router
-
+# from handlers.admin_private import admin_router
+# from handlers.admin import admin_routers
+from handlers.admin import base, cards, players, reports, fsm, controls
 
 
 
@@ -29,7 +30,10 @@ dp = Dispatcher()
 
 dp.include_router(user_private_router)
 dp.include_router(user_group_router)
-dp.include_router(admin_router)
+
+# dp.include_router(admin_router)
+for router in [base.admin_router, cards.admin_router, players.admin_router, reports.admin_router, fsm.admin_router, controls.admin_router]:
+        dp.include_router(router)
 
 
 async def on_startup(bot):
