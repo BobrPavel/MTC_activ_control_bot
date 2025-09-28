@@ -1,4 +1,5 @@
 from aiogram import F, types, Router
+from aiogram.filters import CommandStart
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.orm_query import (
@@ -11,17 +12,12 @@ from filters.chat_types import ChatTypeFilter
 from kbds.reply import get_keyboard
 
 
-PHONE_KB = get_keyboard(
-    "Карты пробития",
-    placeholder="Введите название техники",
-    sizes=(1,),
-)
-
 user_private_router = Router()
 user_private_router.message.filter(ChatTypeFilter(["private"]))
 
 
 # Показывает список карт
+@user_private_router.message(CommandStart())
 @user_private_router.message(F.text == "Карты пробития")
 async def list_of_cards(message: types.Message, session: AsyncSession):
     cards = await orm_get_cards(session)
